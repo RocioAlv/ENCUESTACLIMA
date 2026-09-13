@@ -81,18 +81,51 @@
   .punto-label{ font-size:10px; fill:#556; font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; }
   .eje-label{ font-size:10px; fill:#889; font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif; }
 
-  .dim-row{ margin-bottom:14px; }
-  .dim-row:last-child{ margin-bottom:0; }
+  .periodos{
+    display:flex;
+    gap:6px;
+    margin-bottom:16px;
+    flex-wrap:wrap;
+  }
+  .periodo-btn{
+    background:var(--sand);
+    color:var(--navy);
+    border:none;
+    border-radius:20px;
+    padding:6px 14px;
+    font-size:12.5px;
+    font-weight:600;
+    cursor:pointer;
+  }
+  .periodo-btn.activo{ background:var(--navy); color:var(--white); }
+
+  .dim-row{ margin-bottom:6px; border-bottom:1px solid var(--sand); padding-bottom:14px; }
+  .dim-row:last-child{ border-bottom:none; padding-bottom:0; margin-bottom:0; }
   .dim-top{
     display:flex;
     justify-content:space-between;
     font-size:13.5px;
     font-weight:600;
     margin-bottom:6px;
+    cursor:pointer;
   }
   .dim-top span:last-child{ color:var(--teal); }
+  .dim-top .con-detalle:after{ content:" ▾"; color:var(--gold); font-size:11px; }
   .bar-bg{ background:var(--sand); border-radius:6px; height:9px; overflow:hidden; }
   .bar-fill{ height:100%; border-radius:6px; background:var(--teal); }
+
+  .preguntas{ display:none; margin-top:12px; }
+  .preguntas.show{ display:block; }
+  .pregunta-row{
+    display:flex;
+    justify-content:space-between;
+    gap:10px;
+    font-size:12.5px;
+    padding:8px 0;
+    border-top:1px dashed var(--sand);
+  }
+  .pregunta-row .txt{ color:#445; line-height:1.35; }
+  .pregunta-row .val{ flex-shrink:0; font-weight:700; color:var(--navy); white-space:nowrap; }
 </style>
 </head>
 <body>
@@ -113,8 +146,9 @@
     </div>
 
     <div class="card">
-      <h2>Último período · por dimensión</h2>
+      <h2>Resultados por dimensión</h2>
       <p class="sub" id="ultimo-periodo-label"></p>
+      <div class="periodos" id="periodos"></div>
       <div id="dimensiones"></div>
     </div>
   </div>
@@ -122,14 +156,17 @@
 
 <script>
   // ⚠️ Pegá acá la URL de tu Apps Script (termina en /exec)
-  const API_URL = "https://script.google.com/macros/s/AKfycbw68wPZC6vAz_GLNMYXZDyN3OHxbh3qIqeEzVWdQsTLt8NdWYRAHRqBTuEY2mPaUSnXDg/exec";
+  const API_URL = "https://script.google.com/macros/s/AKfycbwZqhmh4reOwED7lNAV8stuA_x4TvtXRF2a2YO2LvOluhtiS_LHQj7PHUqg-g8AFEc8VQ/exec";
 
   const estadoEl = document.getElementById('estado');
   const tabsEl = document.getElementById('tabs');
   const panelEl = document.getElementById('panel');
 
+  const periodosEl = document.getElementById('periodos');
+
   let DATA = null;
   let areaActual = null;
+  let periodoActual = null;
 
   fetch(API_URL)
     .then(r => r.json())
@@ -142,6 +179,8 @@
       }
       estadoEl.style.display = 'none';
       construirTabs();
+      construirSelectorPeriodos();
+      periodoActual = DATA.periodos[DATA.periodos.length - 1];
       seleccionarArea(DATA.areas[0]);
     })
     .catch(() => {
@@ -161,6 +200,18 @@
     });
   }
 
+  function construirSelectorPeriodos(){
+    periodosEl.innerHTML = '';
+    DATA.periodos.forEach(periodo => {
+      const btn = document.createElement('button');
+      btn.className = 'periodo-btn';
+      btn.textContent = periodo;
+      btn.dataset.periodo = periodo;
+      btn.addEventListener('click', () => seleccionarPeriodo(periodo));
+      periodosEl.appendChild(btn);
+    });
+  }
+
   function etiquetaArea(area){
     if (area.toUpperCase() === 'GENERAL') return 'General';
     return area.charAt(0) + area.slice(1).toLowerCase();
@@ -173,7 +224,15 @@
     });
     panelEl.classList.add('show');
     dibujarTendencia(area);
-    dibujarDimensiones(area);
+    dibujarDimensiones(area, periodoActual);
+  }
+
+  function seleccionarPeriodo(periodo){
+    periodoActual = periodo;
+    document.querySelectorAll('.periodo-btn').forEach(b => {
+      b.classList.toggle('activo', b.dataset.periodo === periodo);
+    });
+    dibujarDimensiones(areaActual, periodoActual);
   }
 
   // Encuentra la dimensión "insignia" (índice de engagement) sin depender
@@ -243,25 +302,47 @@
     }
   }
 
-  function dibujarDimensiones(area){
-    const ultimoPeriodo = DATA.periodos[DATA.periodos.length - 1];
-    document.getElementById('ultimo-periodo-label').textContent = ultimoPeriodo + ' · ' + etiquetaArea(area);
+  function dibujarDimensiones(area, periodo){
+    document.querySelectorAll('.periodo-btn').forEach(b => {
+      b.classList.toggle('activo', b.dataset.periodo === periodo);
+    });
+    document.getElementById('ultimo-periodo-label').textContent = periodo + ' · ' + etiquetaArea(area);
 
-    const filas = DATA.datos.filter(d => d.periodo === ultimoPeriodo && d.valores[area] !== null && d.valores[area] !== undefined);
+    const filas = DATA.datos.filter(d => d.periodo === periodo && d.valores[area] !== null && d.valores[area] !== undefined);
+    const preguntasDelPeriodo = (DATA.preguntasPorPeriodo && DATA.preguntasPorPeriodo[periodo]) || [];
+
     const cont = document.getElementById('dimensiones');
     cont.innerHTML = '';
     if (!filas.length){
-      cont.innerHTML = '<p class="sub">No hay datos de esta área para el último período.</p>';
+      cont.innerHTML = '<p class="sub">No hay datos de esta área para ' + periodo + '.</p>';
       return;
     }
-    filas.forEach(f => {
+    filas.forEach((f, idx) => {
       const valor = f.valores[area];
+      const preguntasDim = preguntasDelPeriodo.filter(p => p.dimension === f.dimension && p.valores[area] !== null && p.valores[area] !== undefined);
+
       const row = document.createElement('div');
       row.className = 'dim-row';
+
+      const idDetalle = 'detalle-' + idx;
       row.innerHTML =
-        '<div class="dim-top"><span>' + f.dimension + '</span><span>' + valor + '%</span></div>' +
-        '<div class="bar-bg"><div class="bar-fill" style="width:' + valor + '%"></div></div>';
+        '<div class="dim-top' + (preguntasDim.length ? ' con-detalle' : '') + '"><span>' + f.dimension + '</span><span>' + valor + '%</span></div>' +
+        '<div class="bar-bg"><div class="bar-fill" style="width:' + valor + '%"></div></div>' +
+        (preguntasDim.length ? '<div class="preguntas" id="' + idDetalle + '"></div>' : '');
       cont.appendChild(row);
+
+      if (preguntasDim.length){
+        const detalleEl = row.querySelector('#' + idDetalle);
+        preguntasDim.forEach(p => {
+          const pr = document.createElement('div');
+          pr.className = 'pregunta-row';
+          pr.innerHTML = '<span class="txt">' + p.pregunta + '</span><span class="val">' + p.valores[area] + '%</span>';
+          detalleEl.appendChild(pr);
+        });
+        row.querySelector('.dim-top').addEventListener('click', () => {
+          detalleEl.classList.toggle('show');
+        });
+      }
     });
   }
 </script>
